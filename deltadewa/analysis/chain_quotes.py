@@ -4,7 +4,7 @@ One function, :func:`read_contract`, answers "what does the chain say about
 this contract, and is it safe to price from?": the matched symbol, the
 close quote, the vendor's IV beside the IV solved from the mid at **the
 caller's own rate and dividend yield** (``analysis.implied_vol``), and the
-reasons the quote may be unusable. The ``/design`` Fetched inputs panel and
+reasons the quote may be unusable. The ``/design`` Pricing inputs panel and
 the liquidity autofill both read through it, so they cannot disagree about
 which contract a leg is or whether its quote is good.
 
@@ -194,6 +194,12 @@ def read_fetched_chain(
             None,
             "ips.yaml has no pricing_feed section, so no option chain is "
             "fetched and every pricing input is hand-entered.",
+        )
+    if not ips_config.pricing_feed.fetches_chain:
+        return FetchedChain(
+            None,
+            "pricing_feed.chain_source is none, so no option chain is "
+            "fetched: every option's IV is hand-entered.",
         )
     try:
         observation = provider.get_option_chain(ips_config.program.instrument)

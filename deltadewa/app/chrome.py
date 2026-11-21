@@ -58,6 +58,7 @@ from deltadewa.clock import program_now
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+    from datetime import date, datetime
 
     from dash.development.base_component import Component
 
@@ -160,6 +161,18 @@ _FETCHED_BANNER_TEXT: Final[dict[DataQuality, str]] = {
 
 _FALLBACK_BANNER_TEXT: Final[str] = "MARKET DATA DEGRADED"
 
+#: The ledger key prefix of an adopted feed series (``feed.chain``).
+_FEED_KEY_PREFIX: Final[str] = "feed."
+
+#: The ledger key of a fault in the resolving code itself.
+_RESOLUTION_KEY: Final[str] = "feed.resolution"
+
+_FEED_BANNER_PREFIX: Final[dict[DataQuality, str]] = {
+    DataQuality.STALE: "PRICING ON THE LAST GOOD FEED DATA",
+    DataQuality.STATIC: "SYNTHETIC PRICING DATA",
+    DataQuality.UNAVAILABLE: "PRICING FEED DOWN",
+}
+
 
 def _stamp_text(ledger: ProvenanceLedger) -> str:
     """Return the quiet, always-present as-of/quality/review-count line."""
@@ -206,6 +219,30 @@ def _stamp_text(ledger: ProvenanceLedger) -> str:
     return f"{market_part} · {pricing_part}"
 
 
+def priced_notice(read_at: datetime, session: date | None) -> str:
+    """Say when the prices were read, and that a reload does not re-read them.
+
+    The app resolves its inputs **once, at start** (9b, D1-B): a page reload
+    re-renders the same readings, and only a restart (the nightly one, after
+    the refresh) reads new ones. A viewer who reloads expecting fresh prices
+    must be told they will not get them, on every page that shows a price.
+    """
+    local = read_at.astimezone(program_now().tzinfo)
+    close = f" from the {session} close" if session is not None else ""
+    return (
+        f"Prices read at {local:%Y-%m-%d %H:%M %Z}{close}. The app reads "
+        "new prices only when it restarts (nightly, after the refresh); "
+        "refreshing this page does not update them."
+    )
+
+
+def _priced_text(ledger: ProvenanceLedger) -> str | None:
+    """Return the header's priced-at notice, or ``None`` without a feed."""
+    if ledger.priced_at is None:
+        return None
+    return priced_notice(ledger.priced_at, ledger.priced_session)
+
+
 def _banner_text(ledger: ProvenanceLedger) -> str:
     """Return the banner text for the ledger's single worst channel."""
     worst = ledger.worst
@@ -214,6 +251,16 @@ def _banner_text(ledger: ProvenanceLedger) -> str:
         # unguarded chrome shared by every page and /health — degrade to
         # a plain statement rather than ever raising here.
         return _FALLBACK_BANNER_TEXT
+    if worst.key == _RESOLUTION_KEY:
+        return f"PRICING INPUTS NOT RESOLVED — {worst.detail}."
+    if worst.key.startswith(_FEED_KEY_PREFIX) and worst.quality is not None:
+        # An adopted feed series (9b): its own entry says what is wrong and
+        # what the book is priced on instead, e.g. "feed down since
+        # 2026-11-14; pricing on your value from 2026-11-01".
+        return (
+            f"{_FEED_BANNER_PREFIX.get(worst.quality, 'PRICING FEED')} — "
+            f"{worst.detail}."
+        )
     if worst.kind is InputKind.FETCHED and worst.quality is not None:
         return _FETCHED_BANNER_TEXT.get(worst.quality, _FALLBACK_BANNER_TEXT)
     if worst.freshness is Freshness.AGING:
@@ -250,6 +297,9 @@ def build_chrome(ledger: ProvenanceLedger) -> html.Div:
     children: list[html.Div] = [
         html.Div(_stamp_text(ledger), className="chrome-stamp"),
     ]
+    priced = _priced_text(ledger)
+    if priced is not None:
+        children.append(html.Div(priced, className="chrome-priced"))
     if ledger.needs_banner:
         suffix = ledger.combined_quality.value.lower()
         banner_class = f"chrome-banner chrome-banner--{suffix}"

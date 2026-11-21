@@ -64,6 +64,7 @@ from deltadewa.analysis.sizing import SizingBasis, size_from_unit, sizing_basis
 from deltadewa.clock import days_between
 from deltadewa.constants import OptionType
 from deltadewa.portfolio.core import OptionPortfolio
+from deltadewa.portfolio.vol_quote import VolOrigin
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -253,7 +254,9 @@ def ladder_from_book(portfolio: OptionPortfolio) -> ProposedLadder | None:
     are the held quantity. Only **live, long puts** become rungs; shorts,
     calls and expired legs are counted in ``excluded_leg_count`` so the
     caller can say what was left out, never netted in with a sign. Per-leg
-    volatility is not carried: a rung is repriced at the book's volatility.
+    volatility is not carried: a rung is repriced where a candidate at its
+    strike and tenor trades (the fetched smile when the feed prices
+    volatility, else the book's volatility).
 
     Args:
         portfolio: The live book.
@@ -445,6 +448,23 @@ def size_ladder(
     )
 
 
+def _rung_volatility(sized: SizedLadder, rung: SizedRung) -> float | None:
+    """Return the volatility to hold *rung* at in the shadow book.
+
+    The rung's own (the one its metrics were priced at, so the shadow book
+    and the per-rung figures cannot disagree), unless that was only the
+    book's flat volatility, which the shadow book inherits anyway and which
+    keeps the leg "inheriting" rather than "custom". An explicit
+    ``sized.vol`` override wins, as it always did.
+    """
+    if sized.vol is not None:
+        return sized.vol
+    quote = rung.metrics.vol_quote
+    if quote is None or quote.origin is VolOrigin.BOOK_FLAT:
+        return None
+    return quote.vol
+
+
 def materialize_ladder(
     portfolio: OptionPortfolio,
     sized: SizedLadder,
@@ -453,10 +473,12 @@ def materialize_ladder(
 
     The result is a throwaway shadow book: the live book's market inputs,
     valuation date and underlying, and only the ladder's legs (rungs sized
-    to zero contracts are omitted). Every leg is priced at the book's
-    volatility (or ``sized.vol``); a held leg's own entered volatility is
-    not carried, so a held ladder reads exactly as the book does only where
-    its legs sit at book volatility; the composer says so when they do not.
+    to zero contracts are omitted). Every leg is priced at the volatility
+    its rung was sized at (the fetched smile's, when the feed prices
+    volatility; else the book's, or ``sized.vol``); a held leg's own
+    entered volatility is not carried, so a held ladder reads exactly as the
+    book does only where its legs sit at that volatility; the composer says
+    so when they do not.
 
     It exists so the existing graders -- the compliance strip,
     ``build_scenario`` -- can score a proposal with no ladder-specific
@@ -482,6 +504,7 @@ def materialize_ladder(
         default_exercise_style=portfolio.default_exercise_style,
         contract_size=portfolio.contract_size,
     )
+    shadow.vol_source = portfolio.vol_source
     for rung in sized.rungs:
         if rung.contracts == 0:
             continue
@@ -493,7 +516,7 @@ def materialize_ladder(
             ),
             quantity=rung.contracts,
             option_type=OptionType.PUT,
-            volatility=sized.vol,
+            volatility=_rung_volatility(sized, rung),
         )
     return shadow
 

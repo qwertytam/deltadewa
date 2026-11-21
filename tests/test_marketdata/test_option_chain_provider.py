@@ -33,6 +33,12 @@ _DGS_CSV = (
 )
 
 
+#: Naive-UTC payload stamps one session either side of the default chain's
+#: (20:33 New York on a Monday, 2026-11-16).
+_PREVIOUS_SESSION = "2026-11-13 01:33:27"
+_NEXT_SESSION = "2026-11-18 01:33:27"
+
+
 def _chain_response(payload: object) -> MagicMock:
     response = MagicMock()
     response.raise_for_status = MagicMock()
@@ -105,12 +111,12 @@ class TestOptionChain:
         assert session.get.call_count == 1
         assert second.source is Source.CACHED
 
-    def test_the_previous_payload_is_kept_beside_the_new_one(
+    def test_the_previous_session_is_kept_beside_the_new_one(
         self,
         tmp_path: Path,
     ) -> None:
         first = standard_chain(spot=5000.0)
-        second = standard_chain(spot=5100.0)
+        second = standard_chain(spot=5100.0, timestamp=_NEXT_SESSION)
         session = _session(first)
         provider = CboeFredProvider(
             cache_dir=tmp_path,
@@ -129,6 +135,35 @@ class TestOptionChain:
         )
         assert previous["value"]["data"]["current_price"] == pytest.approx(
             5000.0,
+        )
+
+    def test_a_second_fetch_of_the_same_session_does_not_overwrite_prev(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        # Two runs in one evening: .prev stays the previous *session*, not
+        # tonight's first fetch.
+        night_before = standard_chain(spot=4900.0, timestamp=_PREVIOUS_SESSION)
+        tonight = standard_chain(spot=5000.0)
+        tonight_again = standard_chain(spot=5001.0)
+        session = _session(night_before)
+        provider = CboeFredProvider(
+            cache_dir=tmp_path,
+            session=session,
+            force_fetch=True,
+        )
+        provider.get_option_chain("SPX")
+        for payload in (tonight, tonight_again):
+            session.get.return_value = _chain_response(payload)
+            provider.get_option_chain("SPX")
+
+        current = json.loads((tmp_path / "chain_SPX.json").read_text())
+        previous = json.loads((tmp_path / "chain_SPX.prev.json").read_text())
+        assert current["value"]["data"]["current_price"] == pytest.approx(
+            5001.0,
+        )
+        assert previous["value"]["data"]["current_price"] == pytest.approx(
+            4900.0,
         )
 
     def test_no_temporary_file_is_left_behind(self, tmp_path: Path) -> None:

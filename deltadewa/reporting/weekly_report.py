@@ -123,11 +123,7 @@ from deltadewa.clock import program_trading_date
 from deltadewa.formatters.values import format_ordinal
 from deltadewa.heartbeat import ping
 from deltadewa.history_cli import MarkOutcome, take_mark
-from deltadewa.marketdata import (
-    CboeFredProvider,
-    default_cache_dir,
-    resolve_data_ttl,
-)
+from deltadewa.marketdata import read_only_provider_for
 from deltadewa.reporting.email_smtp import (
     EmailDeliveryError,
     EmailMessage,
@@ -1271,10 +1267,12 @@ def build_and_render(
 
     """
     portfolio = state.portfolio
-    market_data = CboeFredProvider(
-        cache_dir=default_cache_dir(),
-        ttl=resolve_data_ttl(ips_config),
-        read_only=True,
+    # The one provider the book's inputs were resolved through at load, so
+    # the market environment below and the prices above read one cache.
+    market_data = (
+        state.market_data
+        if state.market_data is not None
+        else read_only_provider_for(ips_config)
     )
 
     shock = CrashShock.from_ips(ips_config.convexity)
@@ -1296,6 +1294,7 @@ def build_and_render(
         portfolio,
         ips_config.pricing_inputs,
         as_of=as_of,
+        resolution=state.resolution,
     )
     analyzer = PortfolioAnalyzer(portfolio)
     carry_metrics = analyzer.calculate_carry_metrics(
@@ -1535,7 +1534,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = _parse_args(argv)
 
     try:
-        state = ProgramState.load(args.export_dir, ips_path=args.ips_path)
+        state = ProgramState.load(
+            args.export_dir,
+            ips_path=args.ips_path,
+            market_data=read_only_provider_for,
+        )
         ips_config = state.ips_config
 
         # `date.today()` was the last naive clock read in the package: a

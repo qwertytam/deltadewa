@@ -78,6 +78,28 @@ def _mc_stats_block(results: dict[str, Any]) -> Component:
     )
 
 
+def _diffusion_note(portfolio: OptionPortfolio) -> list[Component]:
+    """Say what the paths diffuse at, when the feed prices the options (9b).
+
+    The simulation diffuses the underlying at the **book's** volatility, one
+    number typed by you. With the feed pricing the options (a per-option IV
+    from the chain) that number is no longer the volatility the legs are
+    priced at, and reading the paths as the market's would be wrong; so the
+    panel names the number it used.
+    """
+    if portfolio.vol_source is None:
+        return []
+    return [
+        html.P(
+            "The paths diffuse the underlying at the book's volatility "
+            f"({fmt.percent(portfolio.volatility * 100.0)}, a typed value), "
+            "not at the option IVs the feed prices the legs at; the legs are "
+            "revalued at those along each path.",
+            className="plain-language",
+        ),
+    ]
+
+
 def _render_mc_panel_logic(
     *,
     portfolio: OptionPortfolio,
@@ -141,7 +163,13 @@ def _render_mc_panel_logic(
             expected_percentile=expected_percentile,
             drift_measure=results["drift_measure"],
         )
-        return html.Div([dcc.Graph(figure=fig), _mc_stats_block(results)])
+        return html.Div(
+            [
+                dcc.Graph(figure=fig),
+                _mc_stats_block(results),
+                *_diffusion_note(portfolio),
+            ],
+        )
 
     return _safe_render(_build)
 

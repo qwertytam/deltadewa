@@ -2,7 +2,7 @@
 
 from dataclasses import replace as dataclass_replace
 from datetime import datetime as dt
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Self
 
 import pandas as pd
 
@@ -15,13 +15,83 @@ from deltadewa.portfolio.pnl import PnLMixin
 from deltadewa.portfolio.position import OptionPosition
 from deltadewa.portfolio.risk import RiskMixin
 from deltadewa.portfolio.stamps import MarketParameterStamps
+from deltadewa.portfolio.vol_quote import VolOrigin, VolQuote
 from deltadewa.valuation import OptionValuation
 
 if TYPE_CHECKING:
+    from datetime import date
+
+    from deltadewa.analysis.pricing_resolution import (
+        ResolvedInputs,
+        TypedInUse,
+    )
     from deltadewa.portfolio._protocols import _PortfolioProtocol
+    from deltadewa.portfolio.vol_quote import VolSource
 
 
-class OptionPortfolioBase:
+def rebuilt_position(  # pylint: disable=too-many-arguments  # one leg's whole market input set
+    position: OptionPosition,
+    *,
+    spot_price: float,
+    volatility: float,
+    risk_free_rate: float,
+    dividend_yield: float,
+    valuation_date: dt,
+) -> OptionPosition:
+    """Return *position* re-created at the given market inputs.
+
+    The one place a leg is rebuilt for a new rate, yield, spot or
+    volatility, so nothing a leg carries can be dropped by one caller and
+    kept by another: identity (``position_id``), cost basis, structure tag,
+    the confirmation stamp, the operator's recorded liquidity quote and the
+    override pin all survive. (The r/q rebuild in
+    ``update_market_conditions`` used to drop the liquidity quote.)
+
+    Args:
+        position: The leg to copy. Never mutated.
+        spot_price: The underlying's spot for the new option.
+        volatility: The new option's implied volatility.
+        risk_free_rate: Continuous risk-free rate.
+        dividend_yield: Continuous dividend yield.
+        valuation_date: The valuation date.
+
+    Returns:
+        A new position with a new ``OptionValuation``.
+
+    """
+    option = position.option
+    new_option = OptionValuation(
+        spot_price=spot_price,
+        strike_price=option.strike_price,
+        maturity_date=option.maturity_date,
+        volatility=volatility,
+        risk_free_rate=risk_free_rate,
+        dividend_yield=dividend_yield,
+        option_type=option.option_type,
+        valuation_date=valuation_date,
+        exercise_style=position.exercise_style,
+        grid_resolution=option.grid_resolution,
+        use_closed_form=option.use_closed_form,
+    )
+    rebuilt = OptionPosition(
+        new_option,
+        position.quantity,
+        contract_size=position.contract_size,
+        custom_volatility=position.custom_volatility,
+        exercise_style=position.exercise_style,
+        entry_spot=position.entry_spot,
+        entry_date=position.entry_date,
+        entry_premium=position.entry_premium,
+        position_id=position.position_id,
+        volatility_as_of=position.volatility_as_of,
+        structure_id=position.structure_id,
+    )
+    rebuilt.liquidity = position.liquidity
+    rebuilt.volatility_override = position.volatility_override
+    return rebuilt
+
+
+class OptionPortfolioBase:  # pylint: disable=too-many-public-methods  # the book's mutators, and its priced view (9b)
     """Base class for option portfolio management.
 
     Handles core portfolio functionality including position management,
@@ -85,6 +155,15 @@ class OptionPortfolioBase:
         self.default_exercise_style = default_exercise_style
         self.contract_size = contract_size
         self.stamps = stamps if stamps is not None else MarketParameterStamps()
+        # 9b / D7: the operator pinned the typed spot, so a fetched one must
+        # not replace it. The value itself is ``spot_price``; this is only
+        # the pin. A leg's pin is ``OptionPosition.volatility_override``.
+        self.spot_override: bool = False
+        # 9b / D3: where a candidate option (a strike the book does not hold)
+        # gets its volatility. ``None`` is the book's flat ``volatility``,
+        # which is what every candidate was priced at before the feed. Not
+        # persisted: it is derived from the chain at start.
+        self.vol_source: VolSource | None = None
         self._monte_carlo_results: dict[str, Any] | None = None
 
         # Monte Carlo staleness tracking
@@ -553,6 +632,9 @@ class OptionPortfolioBase:
             # this strike/expiry; dropping it makes the leg read "never
             # checked" until the operator records the new contract's quote.
             pos.liquidity = None
+            # 9b / D7: likewise a pinned volatility described the old
+            # contract; pinning a different contract to it would surprise.
+            pos.volatility_override = False
 
     def to_dataframe(self) -> pd.DataFrame:
         """Convert portfolio to pandas DataFrame."""
@@ -653,55 +735,142 @@ class OptionPortfolioBase:
                     )
                 self.dividend_yield = dividend_yield
 
-            # Recreate all positions with new rates, preserving custom
-            # volatility
-            new_positions = []
-            for pos in self.positions:
-                new_option = OptionValuation(
+            # Recreate all positions with new rates, preserving everything
+            # else a leg carries (see rebuilt_position).
+            new_positions = [
+                rebuilt_position(
+                    pos,
                     spot_price=self.spot_price,
-                    strike_price=pos.option.strike_price,
-                    maturity_date=pos.option.maturity_date,
-                    # Preserve existing volatility
                     volatility=pos.option.volatility,
                     risk_free_rate=self.risk_free_rate,
                     dividend_yield=self.dividend_yield,
-                    option_type=pos.option.option_type,
                     valuation_date=self.valuation_date,
-                    exercise_style=pos.exercise_style,
-                    grid_resolution=pos.option.grid_resolution,
                 )
-                new_positions.append(
-                    OptionPosition(
-                        new_option,
-                        pos.quantity,
-                        contract_size=pos.contract_size,
-                        # Preserve custom volatility flag
-                        custom_volatility=pos.custom_volatility,
-                        exercise_style=pos.exercise_style,
-                        # Preserve cost basis and identity across the rebuild
-                        entry_spot=pos.entry_spot,
-                        entry_date=pos.entry_date,
-                        entry_premium=pos.entry_premium,
-                        position_id=pos.position_id,
-                        # Preserve the volatility stamp — the rate/dividend
-                        # rebuild does not touch volatility itself, so
-                        # losing this here would be a silent reset to
-                        # UNKNOWN for every leg on the next rate change.
-                        volatility_as_of=pos.volatility_as_of,
-                        # Likewise for the structure tag: a rate change
-                        # must not silently break a spread into two
-                        # unrelated legs (#333).
-                        structure_id=pos.structure_id,
-                    ),
-                )
+                for pos in self.positions
+            ]
             self.positions = new_positions
+
+    def _positions_at(
+        self,
+        resolved: "ResolvedInputs",
+    ) -> list[OptionPosition]:
+        """Rebuild every leg at the resolved spot, rate, yield and IVs.
+
+        A leg the resolution has no IV for keeps its own. A leg priced on
+        the feed's IV is marked custom: a book-level volatility edit must
+        not overwrite a number the market gave it.
+        """
+        rebuilt: list[OptionPosition] = []
+        for pos in self.positions:
+            leg = resolved.legs.get(pos.position_id)
+            new = rebuilt_position(
+                pos,
+                spot_price=resolved.spot.value,
+                volatility=(
+                    leg.value if leg is not None else pos.option.volatility
+                ),
+                risk_free_rate=resolved.risk_free_rate.value,
+                dividend_yield=resolved.dividend_yield.value,
+                valuation_date=self.valuation_date,
+            )
+            if leg is not None and leg.from_feed:
+                new.custom_volatility = True
+            rebuilt.append(new)
+        return rebuilt
+
+    def candidate_vol(
+        self,
+        *,
+        strike: float,
+        maturity: "dt | date",
+        option_type: OptionType = OptionType.PUT,
+    ) -> VolQuote:
+        """Return the volatility a *candidate* option is priced at (9b, D3).
+
+        The one place a hypothetical option's volatility is decided, so the
+        strike grid, the sizing workbench, the ladder composer and a roll's
+        cost cannot read different surfaces. From the fetched chain when the
+        policy adopts volatility and the chain is usable, else the book's
+        flat ``volatility``, labelled as such.
+
+        Args:
+            strike: The candidate's strike in index points.
+            maturity: Its expiry.
+            option_type: Put (the default: candidates are protective puts).
+
+        Returns:
+            The volatility and how it was decided.
+
+        """
+        if self.vol_source is None:
+            return VolQuote(self.volatility, VolOrigin.BOOK_FLAT)
+        # Duck-typed, not ``isinstance(maturity, dt)``: only a datetime has
+        # ``.date()``, and a datetime built from another class object (a
+        # subclass, or a test's clock) must reduce to its day all the same.
+        to_day = getattr(maturity, "date", None)
+        day = to_day() if callable(to_day) else maturity
+        return self.vol_source.vol_for(
+            strike=strike,
+            maturity=day,
+            option_type=option_type,
+        )
+
+    def apply_resolved_inputs(self, resolved: "ResolvedInputs") -> None:
+        """Price this book on *resolved*, in place, **without stamping**.
+
+        Unlike ``update_market_conditions`` (which stamps a changed value as
+        confirmed by a human) nothing here touches ``stamps`` or a leg's
+        ``volatility_as_of``: a fetched number was not confirmed by anyone,
+        and a typed one is exactly as confirmed as it was. Identity, cost
+        basis, structure tags, recorded liquidity and override pins all
+        survive.
+
+        Meant for a *copy* of the typed book (:meth:`priced_view`); applying
+        it to the book that is saved would write fetched values into the
+        book file.
+        """
+        self.spot_price = resolved.spot.value
+        self.risk_free_rate = resolved.risk_free_rate.value
+        self.dividend_yield = resolved.dividend_yield.value
+        self.positions = self._positions_at(resolved)
+
+    def priced_view(self, resolved: "ResolvedInputs") -> Self:
+        """Return a copy of this book priced on *resolved*.
+
+        This book (the typed one) is not touched. The copy shares the typed
+        book's stamps, pins, symbol, valuation date and exercise-style
+        default, and carries each leg's identity and recorded liquidity, so
+        a reader of the view sees the same book on other inputs.
+        """
+        view = type(self)(
+            underlying_quantity=self.underlying_quantity,
+            spot_price=self.spot_price,
+            volatility=self.volatility,
+            risk_free_rate=self.risk_free_rate,
+            dividend_yield=self.dividend_yield,
+            valuation_date=self.valuation_date,
+            symbol=self.symbol,
+            default_exercise_style=self.default_exercise_style,
+            contract_size=self.contract_size,
+            stamps=self.stamps,
+        )
+        view.spot_override = self.spot_override
+        view.vol_source = self.vol_source
+        view.positions = list(self.positions)
+        view.apply_resolved_inputs(resolved)
+        return view
 
     def clear_positions(self) -> None:
         """Clear all positions from the portfolio."""
         self.positions = []
 
-    def confirm_current_inputs(self, *, as_of: dt | None = None) -> None:
-        """Stamp every hand-entered pricing input as confirmed *now*.
+    def confirm_current_inputs(
+        self,
+        *,
+        as_of: dt | None = None,
+        only: "TypedInUse | None" = None,
+    ) -> None:
+        """Stamp the hand-entered pricing inputs as confirmed *now*.
 
         Unlike ``update_market_conditions``/``set_volatility``/
         ``update_position``, this stamps unconditionally — an operator
@@ -719,19 +888,97 @@ class OptionPortfolioBase:
         Args:
             as_of: When this confirmation is deemed to have happened.
                 Defaults to ``program_now()``.
+            only: When the feed prices some inputs (9b), the typed values
+                that actually price the book. A typed value the feed is
+                hiding is **not** stamped: the operator did not look at
+                it, and confirming it would launder a stale fallback into
+                looking freshly checked for the night the feed fails.
+                ``None`` (no feed) stamps every input, as before.
 
         """
         effective_stamp = as_of if as_of is not None else program_now()
         self.stamps = MarketParameterStamps(
-            spot_as_of=effective_stamp,
-            risk_free_rate_as_of=effective_stamp,
-            dividend_yield_as_of=effective_stamp,
+            spot_as_of=(
+                effective_stamp
+                if only is None or only.spot
+                else self.stamps.spot_as_of
+            ),
+            risk_free_rate_as_of=(
+                effective_stamp
+                if only is None or only.risk_free_rate
+                else self.stamps.risk_free_rate_as_of
+            ),
+            dividend_yield_as_of=(
+                effective_stamp
+                if only is None or only.dividend_yield
+                else self.stamps.dividend_yield_as_of
+            ),
         )
         for pos in self.positions:
-            pos.volatility_as_of = effective_stamp
+            if only is None or pos.position_id in only.legs:
+                pos.volatility_as_of = effective_stamp
         # Deliberately not pos.liquidity: an observation is a quote the
         # operator read, not a confirmation of a value already held, so
         # "mark inputs reviewed" cannot refresh it (8c / N10).
+
+    def pin_spot(self, value: float, *, as_of: dt | None = None) -> None:
+        """Pin the typed spot above a fetched one (9b, D7).
+
+        Stamps unconditionally, even when *value* repeats the current spot:
+        choosing to override is a human confirming this number now, which
+        the change-gated stamping of ``update_market_conditions`` would not
+        record.
+        """
+        effective_stamp = as_of if as_of is not None else program_now()
+        self.spot_price = value
+        for pos in self.positions:
+            pos.option.update_spot_price(value)
+        self.stamps = dataclass_replace(self.stamps, spot_as_of=effective_stamp)
+        self.spot_override = True
+
+    def unpin_spot(self) -> None:
+        """Let a fetched spot replace the typed one again.
+
+        The typed value stays, as the fallback; nothing is re-stamped.
+        """
+        self.spot_override = False
+
+    def _leg(self, position_id: str) -> OptionPosition:
+        for pos in self.positions:
+            if pos.position_id == position_id:
+                return pos
+        raise KeyError(f"no position with id {position_id!r}")
+
+    def pin_volatility(
+        self,
+        position_id: str,
+        value: float,
+        *,
+        as_of: dt | None = None,
+    ) -> None:
+        """Pin one leg's typed IV above a fetched one (9b, D7).
+
+        Keyed by ``position_id``, like :meth:`record_liquidity`. Stamps
+        unconditionally for the reason :meth:`pin_spot` does.
+
+        Raises:
+            KeyError: If no position has *position_id*.
+
+        """
+        pos = self._leg(position_id)
+        pos.option.update_volatility(value)
+        pos.custom_volatility = True
+        pos.volatility_as_of = as_of if as_of is not None else program_now()
+        pos.volatility_override = True
+
+    def unpin_volatility(self, position_id: str) -> None:
+        """Let a fetched IV replace this leg's typed one again.
+
+        Raises:
+            KeyError: If no position has *position_id*.
+
+        """
+        self._leg(position_id).volatility_override = False
 
     def record_liquidity(  # pylint: disable=too-many-arguments
         self,

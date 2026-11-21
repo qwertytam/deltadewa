@@ -76,10 +76,11 @@ out here because once this job runs daily, "the banner's as_of is a day or
 more behind fetched_at" becomes the routine case rather than a rare one.
 
 **The pricing feed (9b).** When ``ips.yaml`` has a ``pricing_feed`` section,
-two more series join the run: ``chain`` (Cboe's delayed SPX option chain,
-about 13 MB, cached raw in the cache folder) and ``rate`` (the FRED series
-the policy names). With no section neither is fetched and the run, its
-total and its exit code are exactly what they were. After a live chain
+``rate`` (the FRED series the policy names) joins the run, and ``chain``
+too unless ``pricing_feed.chain_source`` is ``none`` (with ``cboe``: Cboe's
+delayed SPX option chain, about 13 MB, cached raw in the cache folder).
+With no section neither is fetched and the run, its total and its exit
+code are exactly what they were. After a live chain
 fetch the job also appends a small daily record to
 ``<exports-dir>/chain-history/`` (``deltadewa.marketdata.chain_history``);
 that step is logged and never changes the exit code.
@@ -142,6 +143,7 @@ def _series(
     *,
     skew_lookback_days: int,
     rate_series: str | None = None,
+    fetch_chain: bool = False,
 ) -> list[tuple[str, Callable[[], Observation[Any]]]]:
     """List the (name, fetch) pairs the app depends on, in fetch order.
 
@@ -158,8 +160,10 @@ def _series(
 
     *rate_series* is the ``pricing_feed.rate_series`` policy value, or
     ``None`` when ips.yaml has no ``pricing_feed`` section. Only when it is
-    set do ``chain`` and ``rate`` join the list (9b): without the section
-    nothing is fetched beyond the six readings below.
+    set does ``rate`` join the list (9b), and ``chain`` only when
+    *fetch_chain* is also set (``pricing_feed.chain_source`` is not
+    ``none``): without the section nothing is fetched beyond the six
+    readings below.
 
     ``spot`` was the exception until #336: fetched here since before #279,
     but read by nothing once #279 deleted its old consumer,
@@ -198,7 +202,10 @@ def _series(
         ("spot", lambda: provider.get_spot(symbol)),
     ]
     if rate_series is not None:
-        series.append(("chain", lambda: provider.get_option_chain(symbol)))
+        if fetch_chain:
+            series.append(
+                ("chain", lambda: provider.get_option_chain(symbol)),
+            )
         series.append(("rate", lambda: provider.get_rate(rate_series)))
     return series
 
@@ -209,6 +216,7 @@ def refresh_all(
     *,
     skew_lookback_days: int = DEFAULT_SKEW_LOOKBACK_DAYS,
     rate_series: str | None = None,
+    fetch_chain: bool = False,
 ) -> tuple[dict[str, datetime], int]:
     """Refresh every series the app depends on, independently.
 
@@ -229,6 +237,8 @@ def refresh_all(
             ``_series``.
         rate_series: The ``pricing_feed.rate_series`` policy value, or
             ``None`` for no pricing feed; see ``_series``.
+        fetch_chain: Whether a chain source is configured; see
+            ``_series``.
 
     Returns:
         ``(live, total)`` — ``live`` maps each series name that fetched
@@ -241,6 +251,7 @@ def refresh_all(
         symbol,
         skew_lookback_days=skew_lookback_days,
         rate_series=rate_series,
+        fetch_chain=fetch_chain,
     )
     live: dict[str, datetime] = {}
     for name, fetch in series:
@@ -284,6 +295,7 @@ def verify_read_back(
     *,
     skew_lookback_days: int = DEFAULT_SKEW_LOOKBACK_DAYS,
     rate_series: str | None = None,
+    fetch_chain: bool = False,
 ) -> tuple[str, ...]:
     """Confirm each just-refreshed series reads back through the app's own path.
 
@@ -315,6 +327,8 @@ def verify_read_back(
             ``_series``.
         rate_series: The ``pricing_feed.rate_series`` policy value, or
             ``None``; see ``_series``.
+        fetch_chain: Whether a chain source is configured; see
+            ``_series``.
         live: The series names and ``fetched_at`` timestamps
             ``refresh_all`` reported as freshly written.
 
@@ -333,6 +347,7 @@ def verify_read_back(
             symbol,
             skew_lookback_days=skew_lookback_days,
             rate_series=rate_series,
+            fetch_chain=fetch_chain,
         ),
     )
 
@@ -516,11 +531,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             else _DEFAULT_SYMBOL
         )
     )
-    rate_series = (
-        ips_config.pricing_feed.rate_series
-        if ips_config is not None and ips_config.pricing_feed is not None
-        else None
-    )
+    feed = ips_config.pricing_feed if ips_config is not None else None
+    rate_series = feed.rate_series if feed is not None else None
+    fetch_chain = feed is not None and feed.fetches_chain
 
     try:
         provider = CboeFredProvider(
@@ -545,6 +558,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             symbol,
             skew_lookback_days=skew_lookback_days,
             rate_series=rate_series,
+            fetch_chain=fetch_chain,
         )
         _logger.info("Fetched %d/%d series live", len(live), total)
 
@@ -554,6 +568,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             live,
             skew_lookback_days=skew_lookback_days,
             rate_series=rate_series,
+            fetch_chain=fetch_chain,
         )
         _logger.info(
             "Verified %d/%d fetched series read back through the app's "

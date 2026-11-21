@@ -11,6 +11,8 @@ Exposes:
     worst_source: Combine several sources into the least trustworthy one.
     default_cache_dir: Resolve the shared disk-cache directory.
     resolve_data_ttl: Resolve the CACHED/STALE freshness window from policy.
+    read_only_provider_for: The one read-only provider the app, the digest and
+        the history CLI each build, from the shared cache and the IPS's TTL.
     CACHE_MANIFEST_FILENAME: Filename of the #378 refresh manifest.
     CacheManifest: What the refresh job last recorded about its cache dir.
     write_cache_manifest: Write the #378 manifest, on every refresh run.
@@ -35,7 +37,10 @@ from deltadewa.marketdata._policy import (
     write_cache_manifest,
 )
 from deltadewa.marketdata._protocols import MarketDataProvider
-from deltadewa.marketdata.cboe_fred_provider import CboeFredProvider
+from deltadewa.marketdata.cboe_fred_provider import (
+    CboeFredProvider,
+    read_only_provider_for,
+)
 from deltadewa.marketdata.static_provider import StaticProvider
 
 __all__ = [
@@ -50,6 +55,7 @@ __all__ = [
     "StaticProvider",
     "default_cache_dir",
     "read_cache_manifest",
+    "read_only_provider_for",
     "resolve_data_ttl",
     "worst_source",
     "write_cache_manifest",

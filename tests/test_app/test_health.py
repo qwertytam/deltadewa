@@ -60,17 +60,29 @@ def _state(tmp_path: Path) -> ProgramState:
     )
 
 
-def _write_ips_fixture(tmp_path: Path) -> Path:
-    """Copy the real example IPS to *tmp_path*, valid and self-contained."""
+def _write_ips_fixture(tmp_path: Path, *, chain_source: str = "none") -> Path:
+    """Copy the real example IPS to *tmp_path*, valid and self-contained.
+
+    *chain_source* replaces the example's ``pricing_feed.chain_source``
+    (it ships ``none``) for a test that needs a chain read.
+    """
     fixture_path = tmp_path / "ips.yaml"
     fixture_path.write_text(
-        _EXAMPLE_IPS.read_text(encoding="utf-8"),
+        _EXAMPLE_IPS.read_text(encoding="utf-8").replace(
+            "  chain_source: none ",
+            f"  chain_source: {chain_source} ",
+            1,
+        ),
         encoding="utf-8",
     )
     return fixture_path
 
 
-def _fully_wired_state(tmp_path: Path) -> ProgramState:
+def _fully_wired_state(
+    tmp_path: Path,
+    *,
+    chain_source: str = "none",
+) -> ProgramState:
     """A state with a real, complete IPS loaded — every check should pass.
 
     ``default_exercise_style`` is deliberately left unset so it's wired
@@ -83,7 +95,7 @@ def _fully_wired_state(tmp_path: Path) -> ProgramState:
     boot wiring, so "fully wired" has to mean confirmed inputs as well
     for the phrase to still describe a healthy program.
     """
-    ips_path = _write_ips_fixture(tmp_path)
+    ips_path = _write_ips_fixture(tmp_path, chain_source=chain_source)
     state = ProgramState.load(tmp_path, ips_path=ips_path)
     stamp_inputs(state.portfolio)
     return state

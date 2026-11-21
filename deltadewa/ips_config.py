@@ -18,6 +18,7 @@ import sys
 from collections.abc import Sequence
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
+from enum import StrEnum
 from itertools import pairwise
 from pathlib import Path
 from typing import Any, Final
@@ -586,6 +587,20 @@ class IpsLiquidity:
     open_interest_min: int | None = None
 
 
+class ChainSource(StrEnum):
+    """Where the nightly refresh fetches the option chain from (9b).
+
+    ``none`` fetches no chain: the rate can still be adopted, and spot from
+    the index close, but no option is priced on a fetched IV. ``cboe`` is
+    Cboe's delayed-quote file, which Cboe has blocked to automated clients
+    since November 2026 (``docs/market-data.md``); it stays selectable so a
+    restored or licensed route needs no code change.
+    """
+
+    NONE = "none"
+    CBOE = "cboe"
+
+
 @dataclass(frozen=True)
 class IpsPricingFeed:
     """Policy for pricing the book from fetched market data (9b).
@@ -604,6 +619,9 @@ class IpsPricingFeed:
         and cannot isolate the yield (9b.0, ``docs/market-data.md``).
         ``rate_series`` is the FRED constant-maturity series whose yield is
         the book's single rate.
+        ``chain_source`` is where the option chain comes from, or ``none``
+        for no chain at all (then ``volatility`` cannot be adopted, and an
+        adopted spot is the index close).
         ``max_quote_age_days`` is calendar days between the program's date
         and the chain's trading session, beyond which a fetched quote is
         not used.
@@ -615,9 +633,15 @@ class IpsPricingFeed:
 
     adopt: tuple[str, ...]
     rate_series: str
+    chain_source: ChainSource
     max_quote_age_days: int
     max_spread_pct: float
     override_warn_vol_points: float
+
+    @property
+    def fetches_chain(self) -> bool:
+        """Whether a chain source is configured, so a chain is read at all."""
+        return self.chain_source is not ChainSource.NONE
 
 
 @dataclass(frozen=True)
@@ -1523,6 +1547,21 @@ def _parse_pricing_feed(config: dict[str, Any]) -> IpsPricingFeed | None:
             "pricing_feed.rate_series must be one of "
             f"{sorted(_FRED_RATE_SERIES)}, got {series!r}",
         )
+    raw_source = _require_field(section, "pricing_feed", "chain_source")
+    try:
+        source = ChainSource(raw_source)
+    except ValueError:
+        raise IpsConfigError(
+            "pricing_feed.chain_source must be one of "
+            f"{[s.value for s in ChainSource]}, got {raw_source!r}",
+        ) from None
+    if source is ChainSource.NONE and "volatility" in raw_adopt:
+        raise IpsConfigError(
+            "pricing_feed.adopt names volatility but chain_source is none: "
+            "an option's IV is solved from the fetched chain, so with no "
+            "chain there is nothing to adopt. Set a chain_source or take "
+            "volatility out of adopt.",
+        )
     max_age = _require_field(section, "pricing_feed", "max_quote_age_days")
     if not _is_int(max_age) or max_age <= 0:
         raise IpsConfigError(
@@ -1532,6 +1571,7 @@ def _parse_pricing_feed(config: dict[str, Any]) -> IpsPricingFeed | None:
     return IpsPricingFeed(
         adopt=tuple(raw_adopt),
         rate_series=series,
+        chain_source=source,
         max_quote_age_days=max_age,
         max_spread_pct=_positive_number(section, "max_spread_pct"),
         override_warn_vol_points=_positive_number(

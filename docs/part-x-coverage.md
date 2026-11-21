@@ -158,7 +158,7 @@ default is chipped:
 | 9 | Skew Exposure / Beta | 3 | `/design` PLANNING — **Skew exposure (skew beta)** | `analysis/skew_beta.calculate_skew_beta` | **PRESENT** (8c, N9) — ungraded: the handbook gives no band |
 | 10 | Net Delta Exposure | 3 | `/design` BOOK — `_net_delta_readout`; grid form via the `net_delta` heatmap metric | `portfolio/greeks.net_delta` via `summary_stats()` | **PRESENT** (M2.7) |
 | 11 | Hedge Rebalance Triggers | 3 | `/monitor` — *Decisions*; `/design` PLANNING — *Roll plan*, *Roll status by tranche*, **Hedge rebalance triggers**, *Monetization* | `analysis/roll_status.evaluate_roll_status`, `analysis/roll_planner.build_roll_plan`, `analysis/hedge_triggers.evaluate_hedge_trigger_set`, `analysis/monetization` | **PRESENT** — both trigger sets now live (see note); `roll_planner` gained its consumer in #258 |
-| 12 | Liquidity Risk | 4 | `/design` PLANNING — **Liquidity check**, **Fetched inputs** | `analysis/liquidity.assess_liquidity` over operator-recorded and chain-derived `LiquidityObservation`s | **PARTIAL** (8c, N10; 9b) — a checklist per held leg from your own quote or last night's close; depth, volume and stress-time widening are not measurable on the free feed |
+| 12 | Liquidity Risk | 4 | `/design` PLANNING — **Liquidity check**, **Pricing inputs** | `analysis/liquidity.assess_liquidity` over operator-recorded and chain-derived `LiquidityObservation`s | **PARTIAL** (8c, N10; 9b) — a checklist per held leg from your own quote or last night's close; depth, volume and stress-time widening are not measurable on the free feed |
 | 13 | Delta Drift | 4 | `/design` PLANNING — **Delta drift** | `analysis/scenarios.ScenariosMixin.calculate_delta_drift` | **PRESENT** (M2.8) |
 | 14 | Vega Term Exposure | 4 | `/design` EXPLORATION — **Vega term exposure** | `analysis/maturity.MaturityMixin.calculate_vega_by_maturity` | **PRESENT** (M2.8) |
 | 15 | Hedge Efficiency Ratio | 4 | `/monitor` `_cost_panel`; digest `ProtectionSection.payoff_vs_premium` | Same function as #5 — see below | **PRESENT** (M2.7) |
@@ -338,7 +338,7 @@ chain, whichever was read later, with the other shown beside it.
 `ips.yaml`'s optional `liquidity:` section grades its spread (and, if a
 minimum is set, its open interest), and its age is graded by #367's
 hand-entry rule. The panel states what it cannot see on every render. The
-**Fetched inputs** panel shows the `strike_ladder` rungs' quotes too, which
+**Pricing inputs** panel shows the `strike_ladder` rungs' quotes too, which
 the checklist does not grade. See `docs/market-data.md`, "Liquidity",
 including why it stays out of the provenance ledger and its alarm. #416's
 structural "deep-OTM + long-dated" proxy was not built; a measured quote

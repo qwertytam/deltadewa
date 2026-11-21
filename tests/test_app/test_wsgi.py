@@ -11,6 +11,7 @@ from deltadewa.analysis.candidate import build_put_valuation
 from deltadewa.app import wsgi as wsgi_module
 from deltadewa.constants import ExerciseStyle
 from deltadewa.ips_config import load_ips_config
+from deltadewa.marketdata import cboe_fred_provider as provider_module
 from deltadewa.marketdata import default_cache_dir
 
 
@@ -22,6 +23,10 @@ class TestBuild:
         tmp_path: Path,
     ) -> None:
         """cache_dir/ttl come from the shared resolver, not bare defaults.
+
+        The provider is built once, by ``read_only_provider_for``, inside
+        ``ProgramState.load`` (its TTL is policy, so it needs the IPS that
+        load parses), and the app is handed that same instance.
 
         Patches ``load_ips_config`` at the ``state`` call site (rather than
         relying on ``_build()``'s real default ``config/ips.yaml``, which is
@@ -44,7 +49,7 @@ class TestBuild:
         fixture_ips_config = load_ips_config(fixture_ips_path)
 
         with (
-            patch.object(wsgi_module, "CboeFredProvider") as mock_provider,
+            patch.object(provider_module, "CboeFredProvider") as mock_provider,
             patch.object(
                 state_module,
                 "load_ips_config",
@@ -86,7 +91,7 @@ class TestBuild:
         fixture_ips_config = load_ips_config(fixture_ips_path)
 
         with (
-            patch.object(wsgi_module, "CboeFredProvider"),
+            patch.object(provider_module, "CboeFredProvider"),
             patch.object(
                 state_module,
                 "load_ips_config",

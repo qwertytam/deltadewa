@@ -46,6 +46,7 @@ __all__ = [
     "ChainSnapshot",
     "MatchFlag",
     "parse_cboe_chain",
+    "payload_session_date",
     "quote_session_date",
     "session_close",
 ]
@@ -367,6 +368,35 @@ def _parse_quote(raw: Mapping[str, Any]) -> ChainQuote | None:
     )
 
 
+def _payload_stamp(payload: Mapping[str, Any]) -> datetime:
+    """Return the payload's generation time as an aware UTC datetime.
+
+    The vendor writes the top-level ``timestamp`` as naive UTC.
+
+    Raises:
+        KeyError: The payload has no ``timestamp``.
+        ValueError: It does not read as ``YYYY-MM-DD HH:MM:SS``.
+
+    """
+    return datetime.strptime(  # parsed naive, tagged UTC next
+        str(payload["timestamp"]),
+        "%Y-%m-%d %H:%M:%S",
+    ).replace(tzinfo=UTC)
+
+
+def payload_session_date(payload: Mapping[str, Any]) -> date | None:
+    """Return the trading session a raw payload belongs to, or ``None``.
+
+    Cheap (it reads one field, not the contracts) and never raises: the
+    disk cache uses it to decide whether a new payload is a new session, and
+    an unreadable old entry must not stop a good new one from being written.
+    """
+    try:
+        return quote_session_date(_payload_stamp(payload))
+    except (KeyError, TypeError, ValueError, AttributeError):
+        return None
+
+
 def parse_cboe_chain(payload: Mapping[str, Any]) -> ChainSnapshot:
     """Turn a Cboe delayed-quote payload into a :class:`ChainSnapshot`.
 
@@ -388,10 +418,7 @@ def parse_cboe_chain(payload: Mapping[str, Any]) -> ChainSnapshot:
     """
     try:
         data = payload["data"]
-        stamp = datetime.strptime(  # parsed naive, tagged UTC next
-            str(payload["timestamp"]),
-            "%Y-%m-%d %H:%M:%S",
-        ).replace(tzinfo=UTC)
+        stamp = _payload_stamp(payload)
         spot = float(data["current_price"])
         raw_options = data["options"]
         quotes = tuple(

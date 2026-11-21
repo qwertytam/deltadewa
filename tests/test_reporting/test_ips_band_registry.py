@@ -190,6 +190,7 @@ _CLASSIFICATION: Final[dict[str, BandKind]] = {
     # book rate are selectors, not thresholds.
     "pricing_feed.adopt": BandKind.NOT_A_BAND,
     "pricing_feed.rate_series": BandKind.NOT_A_BAND,
+    "pricing_feed.chain_source": BandKind.NOT_A_BAND,
     # How old a fetched quote may be before it is not used: a cadence,
     # like pricing_inputs.*_max_age_days and liquidity.observation_*.
     "pricing_feed.max_quote_age_days": BandKind.TRIGGER,

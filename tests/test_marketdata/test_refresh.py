@@ -817,6 +817,18 @@ def _ips_without_feed(tmp_path: Path) -> Path:
     return path
 
 
+def _ips_with_cboe_chain(tmp_path: Path) -> Path:
+    """The shipped example with ``chain_source: cboe`` (it ships ``none``)."""
+    text = _EXAMPLE_IPS.read_text().replace(
+        "  chain_source: none ",
+        "  chain_source: cboe ",
+        1,
+    )
+    path = tmp_path / "ips-cboe.yaml"
+    path.write_text(text)
+    return path
+
+
 class TestPricingFeedSeries:
     """The chain and the rate join the run only with a pricing_feed section."""
 
@@ -836,6 +848,27 @@ class TestPricingFeedSeries:
         assert {"chain", "rate"}.isdisjoint(live)
         assert not (tmp_path / "chain_SPX.json").exists()
 
+    def test_chain_source_none_adds_the_rate_and_never_calls_cboe(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """chain_source: none: the blocked chain host is never asked."""
+        session = _dispatching_session()
+        writer = CboeFredProvider(
+            cache_dir=tmp_path,
+            force_fetch=True,
+            session=session,
+        )
+
+        live, total = refresh_all(writer, "SPX", rate_series="DGS1")
+
+        assert (len(live), total) == (7, 7)
+        assert "rate" in live
+        assert "chain" not in live
+        assert not (tmp_path / "chain_SPX.json").exists()
+        requested = [str(call.args[0]) for call in session.get.call_args_list]
+        assert not any("delayed_quotes" in url for url in requested)
+
     def test_a_rate_series_adds_the_chain_and_the_rate(
         self,
         tmp_path: Path,
@@ -846,7 +879,12 @@ class TestPricingFeedSeries:
             session=_dispatching_session(),
         )
 
-        live, total = refresh_all(writer, "SPX", rate_series="DGS1")
+        live, total = refresh_all(
+            writer,
+            "SPX",
+            rate_series="DGS1",
+            fetch_chain=True,
+        )
 
         assert (len(live), total) == (8, 8)
         assert {"chain", "rate"} <= set(live)
@@ -867,7 +905,12 @@ class TestPricingFeedSeries:
         )
 
         with caplog.at_level(logging.WARNING):
-            live, total = refresh_all(writer, "SPX", rate_series="DGS1")
+            live, total = refresh_all(
+                writer,
+                "SPX",
+                rate_series="DGS1",
+                fetch_chain=True,
+            )
 
         assert total == 8
         assert "chain" not in live
@@ -885,7 +928,12 @@ class TestPricingFeedSeries:
             ),
         )
 
-        live, total = refresh_all(writer, "SPX", rate_series="DGS1")
+        live, total = refresh_all(
+            writer,
+            "SPX",
+            rate_series="DGS1",
+            fetch_chain=True,
+        )
 
         assert total == 8
         assert "chain" in live
@@ -913,7 +961,12 @@ class TestPricingFeedSeries:
             session=session,
         )
 
-        live, total = refresh_all(writer, "SPX", rate_series="DGS1")
+        live, total = refresh_all(
+            writer,
+            "SPX",
+            rate_series="DGS1",
+            fetch_chain=True,
+        )
 
         assert total == 8
         assert "chain" not in live
@@ -928,13 +981,19 @@ class TestPricingFeedSeries:
             force_fetch=True,
             session=_dispatching_session(),
         )
-        live, _ = refresh_all(writer, "SPX", rate_series="DGS1")
+        live, _ = refresh_all(
+            writer,
+            "SPX",
+            rate_series="DGS1",
+            fetch_chain=True,
+        )
 
         verified = verify_read_back(
             tmp_path,
             "SPX",
             live,
             rate_series="DGS1",
+            fetch_chain=True,
         )
 
         assert {"chain", "rate"} <= set(verified)
@@ -967,7 +1026,12 @@ class TestUnexpectedFaultInOneSeries:
             patch.object(writer, "get_option_chain", side_effect=boom),
             caplog.at_level(logging.WARNING),
         ):
-            live, total = refresh_all(writer, "SPX", rate_series="DGS1")
+            live, total = refresh_all(
+                writer,
+                "SPX",
+                rate_series="DGS1",
+                fetch_chain=True,
+            )
 
         assert total == 8
         assert "chain" not in live
@@ -997,7 +1061,7 @@ class TestUnexpectedFaultInOneSeries:
                     "--cache-dir",
                     str(tmp_path / "cache"),
                     "--ips-path",
-                    str(_EXAMPLE_IPS),
+                    str(_ips_with_cboe_chain(tmp_path)),
                     "--exports-dir",
                     str(tmp_path / "exports"),
                 ],
@@ -1058,7 +1122,7 @@ class TestMainPricingFeed:
             ),
         )
 
-        exit_code = self._run(tmp_path, _EXAMPLE_IPS)
+        exit_code = self._run(tmp_path, _ips_with_cboe_chain(tmp_path))
 
         assert exit_code == 0
         history = tmp_path / "exports" / "chain-history" / "SPX-2026.jsonl"
@@ -1076,11 +1140,11 @@ class TestMainPricingFeed:
         self,
         tmp_path: Path,
     ) -> None:
-        self._run(tmp_path, _EXAMPLE_IPS)
+        self._run(tmp_path, _ips_with_cboe_chain(tmp_path))
         history = tmp_path / "exports" / "chain-history" / "SPX-2026.jsonl"
         first = history.read_text()
 
-        assert self._run(tmp_path, _EXAMPLE_IPS) == 0
+        assert self._run(tmp_path, _ips_with_cboe_chain(tmp_path)) == 0
         assert history.read_text() == first
 
     def test_without_the_section_nothing_new_is_fetched_or_written(
@@ -1099,7 +1163,7 @@ class TestMainPricingFeed:
         tmp_path: Path,
     ) -> None:
         """No program_state.json: the market points are still recorded."""
-        exit_code = self._run(tmp_path, _EXAMPLE_IPS)
+        exit_code = self._run(tmp_path, _ips_with_cboe_chain(tmp_path))
 
         history = tmp_path / "exports" / "chain-history" / "SPX-2026.jsonl"
         kinds = {
@@ -1119,7 +1183,7 @@ class TestMainPricingFeed:
         blocker.write_text("a file, not a directory")
 
         with caplog.at_level(logging.WARNING):
-            exit_code = self._run(tmp_path, _EXAMPLE_IPS)
+            exit_code = self._run(tmp_path, _ips_with_cboe_chain(tmp_path))
 
         assert exit_code == 0
         assert "chain history" in caplog.text
@@ -1144,7 +1208,7 @@ class TestMainPricingFeed:
                     "--cache-dir",
                     str(tmp_path / "cache"),
                     "--ips-path",
-                    str(_EXAMPLE_IPS),
+                    str(_ips_with_cboe_chain(tmp_path)),
                     "--exports-dir",
                     str(tmp_path / "exports"),
                 ],

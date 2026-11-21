@@ -52,6 +52,7 @@ from deltadewa.analysis.roll_status import (
     evaluate_roll_status,
     expired_reason,
     new_strike_for_entry_otm,
+    roll_target_vol,
     roll_window_opens,
     trigger_reading,
     verdict_reason,
@@ -594,6 +595,8 @@ def structure_target_strikes(
 def net_structure_roll_cost(
     structure: RollStructure,
     target_strikes: dict[str, float],
+    *,
+    portfolio: OptionPortfolio | None = None,
 ) -> float | None:
     """Net cash cost of rolling every leg of *structure* together (#333).
 
@@ -609,6 +612,9 @@ def net_structure_roll_cost(
         structure: The structure being rolled.
         target_strikes: Per-leg targets from
             :func:`structure_target_strikes`.
+        portfolio: The book, when the new strikes should be priced on its
+            candidate surface (9b, D3); ``None`` prices each at its held
+            leg's own volatility, as before the feed.
 
     Returns:
         Net dollar cost (positive = debit), or ``None`` when any leg has no
@@ -620,7 +626,12 @@ def net_structure_roll_cost(
         target = target_strikes.get(leg.position_id)
         if target is None:
             return None
-        total += estimate_roll_up_cost(leg, target, leg.option.volatility)
+        vol = (
+            roll_target_vol(portfolio, leg, target)
+            if portfolio is not None
+            else leg.option.volatility
+        )
+        total += estimate_roll_up_cost(leg, target, vol)
     return total
 
 
@@ -1107,6 +1118,7 @@ def _plan_structure(  # pylint: disable=too-many-arguments,too-many-locals  # on
         roll_up_cost = net_structure_roll_cost(
             structure,
             structure_target_strikes(structure, anchor_target),
+            portfolio=portfolio,
         )
 
     for leg in structure.legs:
