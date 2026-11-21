@@ -591,13 +591,17 @@ class ChainSource(StrEnum):
     """Where the nightly refresh fetches the option chain from (9b).
 
     ``none`` fetches no chain: the rate can still be adopted, and spot from
-    the index close, but no option is priced on a fetched IV. ``cboe`` is
-    Cboe's delayed-quote file, which Cboe has blocked to automated clients
-    since November 2026 (``docs/market-data.md``); it stays selectable so a
+    the index close, but no option is priced on a fetched IV.
+    ``marketdata`` is MarketData.app's option-chain API (a licensed,
+    paid-for source; ``MARKETDATA_TOKEN`` in the jobs container's ``.env``),
+    fetched for the last fully closed session. ``cboe`` is Cboe's
+    delayed-quote file, which Cboe has blocked to automated clients since
+    November 2026 (``docs/market-data.md``); it stays selectable so a
     restored or licensed route needs no code change.
     """
 
     NONE = "none"
+    MARKETDATA = "marketdata"
     CBOE = "cboe"
 
 

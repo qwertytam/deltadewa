@@ -1729,6 +1729,23 @@ class TestPricingFeed:
         assert feed is not None
         assert feed.fetches_chain is False
 
+    def test_marketdata_is_a_chain_source_volatility_can_use(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        section = {
+            **_VALID_FEED,
+            "chain_source": "marketdata",
+            "adopt": ["volatility"],
+        }
+        config = {**_VALID_CONFIG, "pricing_feed": section}
+
+        feed = load_ips_config(_write_yaml(tmp_path, config)).pricing_feed
+
+        assert feed is not None
+        assert feed.chain_source is ChainSource.MARKETDATA
+        assert feed.fetches_chain is True
+
     def test_dividend_yield_cannot_be_adopted(self, tmp_path: Path) -> None:
         """9b.0: parity cannot isolate the yield, so a feed may not price it."""
         section = {**_VALID_FEED, "adopt": ["spot", "dividend_yield"]}
@@ -1745,7 +1762,7 @@ class TestPricingFeed:
             ({"adopt": "spot"}, "adopt"),
             ({"rate_series": "DGS2MO"}, "rate_series"),
             ({"rate_series": 1}, "rate_series"),
-            ({"chain_source": "marketdata"}, "chain_source"),
+            ({"chain_source": "schwab"}, "chain_source"),
             ({"chain_source": "Cboe"}, "chain_source"),
             ({"chain_source": None}, "chain_source"),
             ({"max_quote_age_days": 0}, "max_quote_age_days"),

@@ -79,7 +79,7 @@ _RECORD_BUTTON = "liquidity-record"
 #: cannot see, beside the numbers rather than only in docs.
 _DISCLAIMER = (
     "One quote per held leg: one you typed from your broker, or (when the "
-    "pricing feed is on) last night's close quote fetched from Cboe, "
+    "pricing feed is on) the latest close quote from the option-chain feed, "
     "whichever was read later. Both are point-in-time: a spread here "
     "describes that moment, not now. Neither sees depth behind the "
     "quote, intraday or stress-time widening, or strikes you do not "

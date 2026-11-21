@@ -86,13 +86,14 @@ _PENDING = "pricing-pending"
 
 _EXPLANATION = (
     "What the book is priced on, and where each number came from. The "
-    "feed is Cboe's delayed SPX option chain and a FRED Treasury rate, "
-    'fetched nightly. "IV at book r, q" is solved from the close mid with '
-    "the program's own European engine at the book's rate and dividend "
-    "yield, so it reprices the mid exactly; Cboe's IV is solved at Cboe's "
-    "own rate and dividend, and differs from it by roughly half to three "
-    "quarters of a vol point per point of rate or yield. An IV and the rate "
-    "and yield it was solved with are a pair, never mixed."
+    "feed is the SPX option chain from the source pricing_feed.chain_source "
+    'names, and a FRED Treasury rate, fetched daily. "IV at book r, q" is '
+    "solved from the close mid with the program's own European engine at "
+    "the book's rate and dividend yield, so it reprices the mid exactly; "
+    "the vendor's IV, where it gives one, is solved at its own rate and "
+    "dividend, and differs from it by roughly half to three quarters of a "
+    "vol point per point of rate or yield. An IV and the rate and yield it "
+    "was solved with are a pair, never mixed."
 )
 
 _DIVIDEND_NOTE = (
@@ -241,7 +242,7 @@ _HEADER = html.Tr(
         html.Th("Contract"),
         html.Th("Bid / ask (mid)"),
         html.Th("Spread"),
-        html.Th("Cboe IV"),
+        html.Th("Vendor IV"),
         html.Th("IV at book r, q"),
         html.Th("Open interest"),
         html.Th("Flags"),
@@ -254,7 +255,7 @@ _RUNG_HEADER = html.Tr(
         html.Th("Contract"),
         html.Th("Bid / ask (mid)"),
         html.Th("Spread"),
-        html.Th("Cboe IV"),
+        html.Th("Vendor IV"),
         html.Th("IV at book r, q"),
         html.Th("Open interest"),
         html.Th("Flags"),

@@ -44,6 +44,17 @@ history for that record instead.
   in the cache is never read, the rate can still be adopted and spot comes
   from the index close; `volatility` in `adopt` is then a validation error.
   Both shipped templates carry `none`. The Cboe code stays, selectable.
+- **`chain_source: marketdata` — the option chain from MarketData.app**, a
+  paid API licensed for internal use. One request a run fetches the whole
+  SPX chain of the **last fully closed session** (served from 09:30 New
+  York the next trading day), so the book is priced on the previous
+  session's close; with this source, move the refresh-and-restart cron line
+  to the morning (`0 15 * * *`, RUNBOOK §9). Put the token in the host's
+  `.env` as `MARKETDATA_TOKEN` (the refresh job alone reads it; it is never
+  logged, and the account allows one IP address at a time). A missing or
+  rejected token fails the chain series alone. The refresh log now names
+  the cause whenever a series cannot be fetched (it said only "could not
+  fetch"). The Pricing inputs panel's "Cboe IV" column is now "Vendor IV".
 - **The app reads new prices only when it restarts.** It resolves the feed
   once, when it starts; refreshing a page does not update the prices. Both
   pages say so in the header ("Prices read at <time> from the <date> close...
