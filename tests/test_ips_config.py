@@ -1762,7 +1762,7 @@ class TestPricingFeed:
             ({"adopt": "spot"}, "adopt"),
             ({"rate_series": "DGS2MO"}, "rate_series"),
             ({"rate_series": 1}, "rate_series"),
-            ({"chain_source": "schwab"}, "chain_source"),
+            ({"chain_source": "not-a-source"}, "chain_source"),
             ({"chain_source": "Cboe"}, "chain_source"),
             ({"chain_source": None}, "chain_source"),
             ({"max_quote_age_days": 0}, "max_quote_age_days"),

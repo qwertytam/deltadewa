@@ -123,8 +123,8 @@ read as another's.
   a paid API licensed for internal use (no redistribution; this program's
   private app and encrypted backup are internal). One request a run, for
   the whole chain (both roots, every expiry) **of the last fully closed
-  session**: `?date=<session>&expiration=all`, about 25 credits against a
-  10,000-a-day allowance. A session is served from 09:30 New York on the
+  session**: `?date=<session>&expiration=all`, about 25 credits (the vendor's
+  daily credit allowance depends on the plan; see its pricing page). A session is served from 09:30 New York on the
   next trading day, so the refresh runs in the morning (RUNBOOK §9) and the
   book is priced, all day, on the previous session's close; over a weekend,
   on Thursday's until Monday 09:30. The quotes are the session's close and

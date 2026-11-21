@@ -17,10 +17,11 @@ quotes and, as ``underlyingPrice``, the index's official close. The vendor
 returns no IV for a dated request; nothing here needs one, because every IV
 this program uses is solved from the mid by its own engine.
 
-**Why the lag is accepted.** The plan in use allows only fully closed
-sessions, so the book is priced on the previous session's close for the
-whole of the next trading day (and on Thursday's close over a weekend,
-until Monday's 09:30 release). Every surface already states which close
+**Why the lag is accepted.** A dated request serves only fully closed
+sessions (the vendor's trial tier allows nothing else), so the book is
+priced on the previous session's close for the whole of the next trading
+day (and on Thursday's close over a weekend, until Monday's 09:30
+release). Every surface already states which close
 the book is priced on, and ``pricing_feed.max_quote_age_days`` bounds it.
 
 **The token** is ``MARKETDATA_TOKEN`` in the jobs container's environment
