@@ -85,9 +85,9 @@ _VOL = 0.19
 def _two_tranche_book() -> OptionPortfolio:
     """Near tranche inside the MC default horizon; far tranche outside it.
 
-    Mirrors the reported book: a ~285-day, ~27.5%-OTM near put (the June
-    tranche that read $0) and a further-dated control (the December
-    tranche, which read correctly throughout).
+    The near put carries the book's nearest maturity (it read $0 in the
+    report); the further-dated put is the control (it read correctly
+    throughout).
     """
     pf = OptionPortfolio(
         underlying_quantity=0.0,
@@ -215,7 +215,7 @@ class TestLegMarksSurviveMonteCarlo:
     """A leg's persistent marks must not zero out after an MC run."""
 
     def test_near_tranche_matches_hand_checked_black_scholes(self) -> None:
-        """Reproduces the review's #3 finding: the near (June) tranche.
+        """Reproduces the review's #3 finding: the near tranche.
 
         27.5% OTM, 0.78y, 19% vol hand-checks (closed-form Black-Scholes,
         S=5900, K=4277.50, r=4%, q=1.5%) to $6.4182/unit -- not the $0 the
