@@ -20,7 +20,7 @@ published at <https://qwertytam.github.io/deltadewa-handbook/>, extracted out of
 this repo's `docs/` so it can be read and reused on its own.
 
 Market data defaults to **fully offline** (seeded from the loaded portfolio), with an
-optional live CBOE/FRED pull that falls back gracefully on network failure.
+optional live market-data pull (CBOE/FRED, and a licensed option-chain source for pricing — see `docs/market-data.md`, "Fetched pricing inputs") that falls back gracefully on network failure.
 
 ## Features
 
@@ -38,7 +38,7 @@ optional live CBOE/FRED pull that falls back gracefully on network failure.
 - **Program report** — IC/board format, delivered as the emailed weekly digest
 - **IPS policy contract** — carry budget, convexity and drawdown targets, roll/rally/
   monetization triggers (`config/ips.yaml`)
-- **Live CBOE/FRED market data** (optional; disk-cached with a policy-driven TTL
+- **Live market data (CBOE/FRED; MarketData.app for the option chain)** (optional; disk-cached with a policy-driven TTL
   — `market_environment.data_ttl_minutes` in `config/ips.yaml`; automatic offline
   fallback)
 

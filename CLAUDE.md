@@ -147,7 +147,7 @@ without it and are tested for it (`formatters/dataframes.py`'s
 ## Work in progress
 
 The foundation is done and the handbook's Part X panels are built: a
-`marketdata/` provider interface (free CBOE/FRED backend), an `ips.yaml` program
+`marketdata/` provider interface (CBOE/FRED and MarketData.app backends), an `ips.yaml` program
 config, and a Roll Status panel. The **sizing workbench, strike-candidate
 browser, and monetization planner are also done, tested, and wired** — each is its own
 `analysis/`-layer module (`sizing.py`, `strike_ladder.py`, `monetization.py`)
@@ -553,6 +553,35 @@ both required; `0` is a recorded zero, blank is refused). The logic is
 since inception, and the hedge-success gauge rebuilt on realized carry. See
 `docs/part-x-coverage.md`, "The position history (8e.1)", and RUNBOOK §5.1
 (run `history_cli init` once) and §6.1 (recording a roll).
+
+**9b has shipped (1.0.0): the book is priced on a nightly feed, and what you
+type is the override and the fallback.** A `pricing_feed:` section in
+`ips.yaml` (every key required, no code defaults; absent or `adopt: []` means
+everything stays typed) makes the refresh job fetch the SPX option chain and a
+FRED Treasury yield. `adopt` names what is priced on them: `spot` (the
+chain's index level, the index close as backup), `risk_free_rate` (the one
+`rate_series`), and `volatility` (each held option's IV, solved by this
+program's own European engine from the close mid at the effective rate and
+dividend yield). The dividend yield is never fetched and stays typed.
+`chain_source` (`none`, `marketdata`, `cboe`; required, no default) picks the
+chain: Cboe's delayed file is refused to automated clients and its terms
+forbid extraction, so `marketdata` (MarketData.app, a licensed API; token in
+`.env` as `MARKETDATA_TOKEN`, read by the refresh job alone) fetches the last
+fully closed session and the book is priced on the previous close. The
+mechanism: the typed book is the only thing saved; `ProgramState` derives a
+**priced view** from it (`analysis/pricing_resolution.py`, one origin per
+input: FETCHED, LAST_GOOD, OVERRIDE, FALLBACK, ENTERED), read **once, at
+start**: the refresh is followed by `docker compose restart app` (with
+`marketdata`, run both in the morning, `0 15 * * *` UTC, RUNBOOK §9), and
+both pages say a reload does not update prices. Candidates the book does not
+hold are priced on the same smile (`analysis/vol_source.py`: exact contract,
+between strikes, between expiries, else the book's flat vol, labelled).
+Overrides (spot, one option's IV) and the dividend-yield edit are
+review-then-confirm on `/design`'s **Pricing inputs** panel, and are listed on
+`/monitor` and in the digest. A fetched value is never saved to the book,
+stamped as confirmed, or journaled as a trade; realized carry names an option
+whose IV changed source. #413 closed on root cause, #510 superseded. See
+`docs/market-data.md`, "Fetched pricing inputs".
 
 **Read `docs/part-x-coverage.md` before adding or moving a dashboard panel**
 — it is the current handbook-item → surface map (mapping into the public

@@ -87,6 +87,23 @@ def _session_close(day: datetime) -> datetime:
     return local.astimezone(UTC)
 
 
+def earlier_session_day() -> datetime:
+    """Return the nearest program day whose session precedes today's chain's.
+
+    A fixed ``days_from_today(-n)`` is a different session only on some
+    weekdays: on a Sunday, two days back and one day back are both Friday's
+    session. Walking back until the session really is earlier holds on every
+    day of the week, and stays inside a few calendar days of ``max_quote_age``.
+    """
+    today_session = quote_session_date(_session_close(program_date()))
+    for back in range(1, 8):
+        day = days_from_today(-back)
+        if quote_session_date(_session_close(day)) < today_session:
+            return day
+    msg = "no earlier session within a week"
+    raise AssertionError(msg)
+
+
 def session_stamp(day: datetime) -> str:
     """Return the payload stamp (naive UTC) of 20:33 New York on *day*."""
     return _session_close(day).strftime("%Y-%m-%d %H:%M:%S")
