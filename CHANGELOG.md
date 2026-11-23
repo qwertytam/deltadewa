@@ -17,11 +17,16 @@ history for that record instead.
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [1.0.0] - 2026-11-22
+
 ### Added
 
 - **9b — the book is priced on a nightly feed instead of on numbers you
   type (#413, #510).** With a `pricing_feed:` section in `ips.yaml` the
-  nightly refresh fetches Cboe's delayed SPX option chain and a FRED Treasury
+  nightly refresh fetches the SPX option chain (from the source
+  `pricing_feed.chain_source` names) and a FRED Treasury
   yield, and whatever the section's `adopt` list names is priced on them:
   `spot` is the chain's own index level (the nightly index close is the
   backup), `risk_free_rate` is the one FRED series you name, and `volatility`
@@ -36,7 +41,7 @@ history for that record instead.
   **Your typed values stay in `program_state.json` untouched, as the override
   and the fallback; a fetched number is never written to it, stamped as
   confirmed, or journaled as a trade.**
-- **`pricing_feed.chain_source` (`none` or `cboe`) — breaking for a live
+- **`pricing_feed.chain_source` (`none`, `marketdata` or `cboe`) — breaking for a live
   `config/ips.yaml` that has a `pricing_feed:` section: add the key.** Cboe
   has refused its delayed-quote file to automated clients since about
   2026-11-19, and its pages prohibit automated extraction of it. With
@@ -933,7 +938,8 @@ Phase 1 close-out and the start of Phase 2, tagged together:
 - **M2.2 — Dash skeleton + shared layer** (#212) — the two-page app
   scaffold and `state.ProgramState`. Observation provenance (#213).
 
-[Unreleased]: https://github.com/qwertytam/deltadewa/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/qwertytam/deltadewa/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/qwertytam/deltadewa/compare/v0.11.0...v1.0.0
 [0.11.0]: https://github.com/qwertytam/deltadewa/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/qwertytam/deltadewa/compare/v0.9.3...v0.10.0
 [0.9.3]: https://github.com/qwertytam/deltadewa/compare/v0.7.0...v0.9.3

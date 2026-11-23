@@ -2556,6 +2556,44 @@ and what must not move), `tests/test_app/test_roll_action_surfaces_agree.py`
 
 ---
 
+## Batch 9b — prices from a feed instead of typed-in numbers (1.0.0)
+
+**Status: done.** 9b.0 (spike, PR #508), PR-A (fetch and store, #511), PR-B
+(adoption, #512) and the chain-source switch (#514); released as 1.0.0.
+
+Every price used to rest on four typed numbers: spot, the rate, the dividend
+yield and each option's IV. The 9b.0 spike found three of them fetchable
+(the dividend yield is not: put-call parity cannot isolate it) and that the
+IV is better solved from the mid by this program's own engine than taken from
+a vendor, whose rate and dividend differ from the book's.
+
+- **PR-A** fetches and stores the chain and a Treasury rate, moves the
+  market-data cache out of `exports/` (the payload is vendor data, not
+  backup), fills the liquidity check from the chain, keeps a small daily
+  record of it under `exports/chain-history/`, and shows it on a read-only
+  panel. Nothing was priced on it.
+- **PR-B** prices on it: a typed book plus a derived priced view, resolved
+  once at start (so the nightly refresh is followed by an app restart), one
+  origin per input, overrides and a fallback ladder (D8), a dividend-yield
+  edit, candidate IVs on the same smile, and a realized-carry flag for an IV
+  that changed source. Closed #413 on its root cause and superseded #510.
+- **#514** made the chain's source a required policy key
+  (`pricing_feed.chain_source`: `none`, `marketdata`, `cboe`) after Cboe
+  began refusing automated clients, and added MarketData.app as the licensed
+  source. Its lower tiers serve only fully closed sessions, so the book is
+  priced one session behind; a tier that serves same-day quotes would be a
+  small follow-up.
+
+The decisions, so they are not re-litigated: resolve once at start and
+restart nightly (not a live reload); one book rate from one named series; a
+fetched value is never saved to the book; an override lasts until cleared and
+is listed so it is not forgotten; new policy keys have no code defaults.
+Follow-ups filed: #513 (flaky form-fill tests on slow runners) and #515
+(wording on the adopted-pricing screens). See `docs/market-data.md`, "Fetched
+pricing inputs", and RUNBOOK §4.1.
+
+---
+
 ## Deferred — backlog, not in this plan
 
 Only the first is genuinely blocked. The 2026-08-06 re-audit reclassified
@@ -2566,7 +2604,7 @@ removed, so the reclassification stays legible next to what it led to;
 only #12 and #9 are still actually deferred.
 
 - **#12 Liquidity Risk** — **partial.** 8c gave it a hand-entered per-leg
-  checklist; 9b fills it from the nightly Cboe option-chain fetch (bid, ask
+  checklist; 9b fills it from the nightly option-chain fetch (bid, ask
   and open interest per held leg). Depth, volume and stress-time widening
   stay unmeasurable on the free feed.
 - ~~**#13 Delta Drift** — a surfacing gap, not a data gap. Handbook §13
@@ -2597,7 +2635,7 @@ only #12 and #9 are still actually deferred.
 Opened during Phase 4 and deliberately not taken there:
 
 - **#156 — options-chain feed (D2: Tier-4 liquidity, skew-aware pricing,
-  backtesting).** 9b built the free half (the delayed chain: per-leg bid, ask,
+  backtesting).** 9b built the chain feed (`pricing_feed.chain_source`: per-leg bid, ask,
   open interest and IV). What remains for #156 is paid history, for
   backtesting and a realised vol surface.
 - ~~**#70 — track hedge historical P&L.** The position-history layer. Also the

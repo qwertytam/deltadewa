@@ -43,6 +43,7 @@ from tests.clock_helpers import days_from_today
 from tests.feed_fixtures import (
     STRIKES,
     adopting_ips,
+    earlier_session_day,
     fed_chain,
     leg_expiry,
     load_state,
@@ -403,7 +404,7 @@ class TestHealth:
             "SPX": fed_chain(
                 leg_expiry().date(),
                 STRIKES,
-                program_day=days_from_today(-2),
+                program_day=earlier_session_day(),
             ),
         }
         state = load_state(tmp_path, ips, older)
@@ -418,6 +419,17 @@ class TestHealth:
         assert resolution["newer_cached_session"] is not None
         assert resolution["newer_cached_session"] > priced_session.isoformat()
         assert state.resolution.session_date == priced_session
+
+    def test_the_earlier_session_is_earlier_on_every_weekday(self) -> None:
+        # A fixed "two days back" is the same Friday session on a Sunday.
+        earlier = fed_chain(
+            leg_expiry().date(),
+            STRIKES,
+            program_day=earlier_session_day(),
+        )
+        today = fed_chain(leg_expiry().date(), STRIKES)
+
+        assert earlier.session_date < today.session_date
 
     def test_a_resolver_fault_degrades_status_and_is_named(
         self,

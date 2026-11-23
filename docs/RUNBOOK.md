@@ -273,8 +273,8 @@ run any of them by hand.
 
 With a `pricing_feed:` section in `config/ips.yaml` and a non-empty `adopt:`
 list, the book is priced on the nightly feed instead of on numbers you typed:
-spot and each option's implied volatility from Cboe's delayed SPX option
-chain, and the risk-free rate from one FRED Treasury series. The dividend
+spot and each option's implied volatility from the SPX option chain that
+`pricing_feed.chain_source` names, and the risk-free rate from one FRED Treasury series. The dividend
 yield is never fetched (put-call parity cannot separate it from funding and
 timing) and stays yours. Your typed values stay in `program_state.json`
 untouched, as the override and the fallback; a fetched number is never
@@ -302,7 +302,11 @@ unavailable for that long, a minute after the refresh.
 
 **Turning it on** (the first time, or after a deploy that changed policy):
 
-1. Edit `config/ips.yaml` on the droplet: `pricing_feed.adopt: [spot,
+1. Edit `config/ips.yaml` on the droplet. If it has no `pricing_feed:`
+   section yet, paste the whole section from `config/ips.example.yaml`: all
+   six keys (`adopt`, `chain_source`, `rate_series`, `max_quote_age_days`,
+   `max_spread_pct`, `override_warn_vol_points`) are required, and the
+   loader refuses a partial section. Then set `pricing_feed.adopt: [spot,
    risk_free_rate, volatility]` (any subset; `dividend_yield` is refused)
    and `pricing_feed.chain_source`: `marketdata` (MarketData.app, the
    licensed source; needs `MARKETDATA_TOKEN` in `.env`, §10), `none` (no
@@ -316,7 +320,9 @@ unavailable for that long, a minute after the refresh.
    config/ips.yaml` (a missing required `pricing_feed` key shows up here, not
    as a live "No IPS policy is loaded" page), then
    `docker compose up -d`.
-2. Run the refresh once by hand so there is a cache (§11; `.env` must carry
+2. With `chain_source: marketdata`, put the token in `.env` first (the
+   "MarketData.app, once" paragraph below), or the chain series will fail.
+   Run the refresh once by hand so there is a cache (§11; `.env` must carry
    the SMTP block, §10, or the `jobs` service will not start), then
    `docker compose restart app`: the app reads the cache once, when it
    starts, so it prices on nothing it has not been restarted to see.
@@ -386,7 +392,9 @@ the feed is hiding.
 
 **Turning it off.** Remove the `pricing_feed:` section (nothing is fetched
 and every input is typed), or set `adopt: []` (the feed is fetched and shown,
-and nothing is priced on it). Rebuild (§4) and restart. Your typed values
+and nothing is priced on it). Rebuild and bring it up (§4: `docker compose
+build app jobs`, then `docker compose up -d`; a plain `restart` keeps the old
+image and its old policy). Your typed values
 were never touched, so the book prices exactly as before. Drop the
 `; docker compose restart app` from the crontab if you like: it does no harm
 without a feed.
@@ -1114,8 +1122,12 @@ them are kept apart:
 ```bash
 # deploy's crontab (crontab -e, as `deploy`) — the two jobs run through the
 # `jobs` compose service (see compose.yaml); the restart after the refresh
-# is the `app` service. The digest line is scheduled AFTER the refresh line
-# so it reads freshly-warmed data.
+# is the `app` service. The digest reads whatever cache the last refresh
+# left: with the 02:30 line, Sunday's 03:00 digest follows that night's run;
+# with the morning line below, it reads Saturday's (the chain is Thursday's
+# close over a weekend either way, §4.1).
+# Cron runs in the HOST's local time: check `timedatectl` says UTC, or
+# shift the hours below.
 mkdir -p ~/deltadewa/logs
 
 crontab -e
@@ -1133,7 +1145,7 @@ crontab -e
 # release of the previous session's chain, §4.1). One line, not both.
 # 0 15 * * * cd /home/deploy/deltadewa && docker compose run --rm --no-deps jobs python -m deltadewa.marketdata.refresh >> /home/deploy/deltadewa/logs/refresh.log 2>&1 ; docker compose restart app >> /home/deploy/deltadewa/logs/refresh.log 2>&1
 
-# Weekly digest, with delivery — Sundays 03:00 UTC, after the refresh above.
+# Weekly digest, with delivery — Sundays 03:00 UTC, on the last refresh's cache.
 0 3 * * 0 cd /home/deploy/deltadewa && docker compose run --rm --no-deps jobs python -m deltadewa.reporting.weekly_report --send-email >> /home/deploy/deltadewa/logs/weekly_report.log 2>&1
 ```
 
@@ -1394,7 +1406,9 @@ rm ~/block-cboe.yaml
 Every Cboe reading fails (the chain, spot, skew and the VIX term structure);
 FRED's (`vix`, `vix_history`, `rate`) do not. Expect `NOT refreshed` for the
 five Cboe series, `Fetched 3/8 series live` (with `chain_source: none`,
-four Cboe series and `Fetched 3/7`), exit `1` and a heartbeat ping.
+four Cboe series and `Fetched 3/7`; with `chain_source: marketdata` and a
+working token the chain does not come from Cboe, so four Cboe series fail
+and the run reads `Fetched 4/8`), exit `1` and a heartbeat ping.
 The cache files are left as they were. A series reads `STALE` in `/health`
 only once its cache is older than `market_environment.data_ttl_minutes`, so
 the run's own log and the unchanged cache files are the proof, not `/health`
@@ -1412,6 +1426,12 @@ command above is a documented diagnosis, not a guess:
 
 See `deltadewa/marketdata/refresh.py`'s module docstring for the
 authoritative version of this table.
+
+**A chain that never works does not trip the dead-man's switch.** A missing or
+rejected `MARKETDATA_TOKEN` (or Cboe's block) leaves the `chain` series failing
+every night: exit `1`, and the heartbeat still pings. After any deploy, and
+weekly, look for `chain: NOT refreshed` in `logs/refresh.log` and for a
+`freshness_reason` naming the chain in `/health` (§12).
 
 **Weekly digest exit codes** — a manual `echo $?` after the command above
 is a documented diagnosis, not a guess:
