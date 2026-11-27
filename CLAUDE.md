@@ -758,8 +758,9 @@ don't fix):
   output; this runs a chosen selection and turns the failures into a diff. Run
   when a sizing, pricing or policy change is expected to move golden values
   (#436's accepted 0.1pp flip at the band floor is the standing example).
-- **chain-match-reporter** — given a saved vendor option-chain payload and a
-  book copy, one row per leg: the matched symbol and root, bid/ask/mid, the
+- **chain-match-reporter** — given a cached vendor option-chain payload (it
+  never fetches: the vendor allows one IP address at a time and the deploy host
+  holds it) and a book copy, one row per leg: the matched symbol and root, bid/ask/mid, the
   vendor's iv beside the iv solved from the mid with this repo's own European
   engine at the book's rate and dividend yield, open interest, quote time, and
   flags (ZERO-BID, IV-ZERO, ABSENT, AMBIGUOUS). Never prints the payload.
@@ -775,6 +776,21 @@ don't fix):
   failing *test* expectations into a diff; this diffs the *verdicts an operator
   reads* across a change of input or policy, with no test involved. Run it before
   adopting a new source for a pricing input and before moving an IPS band.
+- **vocabulary-auditor** — inventories every status word, badge, origin label
+  and verdict on `/monitor`, `/design`, the digest and `/health`: its source
+  enum or constant, the gloss a reader is given, and the level it is rolled up
+  to; flags COLLISION (one word, two meanings) / SYNONYM (two words, one
+  meaning) / ORPHAN (no source, no gloss, or never rendered). Nearest sibling
+  is `false-green-auditor`: that grades whether one rendered verdict is true of
+  the number behind it; this grades whether the words, taken together, can be
+  told apart. Run before adding or renaming a status word or removing a state.
+- **cold-reader** — reads **only** rendered page text (a headless dump of an
+  invented book, or supplied PDFs), never source, works through a supplied
+  checklist, and reports ANSWERED / GUESSED (why) / STUCK per step plus
+  contradictions between surfaces. Nearest sibling is `vocabulary-auditor`:
+  that reads source and can say why two words collide; this cannot, and
+  reports only where a reader gets lost. It has no memory, on purpose. Run
+  before shipping a wording or layout change and before a field test.
 
 Since #349, `.gitignore` excludes `.claude/*` but un-ignores `!.claude/agents/`,
 so the agent *definition files* are tracked and public — only `agent-memory/`
