@@ -30,9 +30,25 @@ A PR with a user-visible or operator-visible effect adds an entry under
 
 ## Cutting a release
 
-Pick the number by the largest change since the last tag: patch for fixes
-and docs, minor for new features or a breaking IPS change (pre-1.0), major
-only for 1.0 and after. Then, in **one release PR** off `main`:
+Pick the number by the largest change since the last tag: **patch** for
+fixes and docs, **minor** for new features, **major** for a breaking change
+as defined here.
+
+**Breaking changes after 1.0.** A change is breaking when a deployed host's
+own `config/ips.yaml` or `exports/program_state.json`, read correctly by the
+previous release, would, unedited, fail to load or change meaning (a key or
+field changes unit or effect or is now ignored, or the default for an
+omitted one changes), or would be rewritten so that the previous release
+cannot read it and rolling back needs a restore. A breaking change takes a
+**major** version. A new optional key, section or field is a **minor** if
+existing files load and mean what they did, and the previous release can
+still read them. A patch is never breaking. This rule is about files: a
+corrected calculation doesn't become breaking just because readings move,
+but its CHANGELOG entry says they do. A breaking entry says **Breaking**,
+names the file and key or field, and gives the step to take before
+deploying.
+
+Then, in **one release PR** off `main`:
 
 1. Rename `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` (the date the tag
    will be cut), and add a fresh `## [Unreleased]` above it containing
