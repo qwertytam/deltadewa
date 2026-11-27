@@ -65,8 +65,18 @@ inventory. You never edit.
   into the image at build time, so it is absent from a clone and from CI.
   Its tracked templates are `config/ips.example.yaml` and
   `examples/ips/ips_default.yaml`; a key change must touch both, plus
-  `ips_config.py`. `python -m deltadewa.ips_config --check <file>` lists keys
-  that have no code default.
+  `ips_config.py`.
+- `python -m deltadewa.ips_config --check <file>` is **not** a per-key list of
+  what lacks a code default. It reports four things: (1) **sections absent**
+  from the file that the loader fills with built-in defaults; (2) **template
+  keys missing** from the file, under "these have code defaults", so the keys
+  listed there are ones that *do* have a default; (3) **optional sections with
+  no code defaults** absent from the file, named by **section** only
+  (`_SECTIONS_WITHOUT_CODE_DEFAULTS`: `liquidity`, `strike_ladder`,
+  `pricing_feed`), never key by key; (4) **keys the loader does not
+  recognise**, which are silently ignored. A key that appears nowhere in the
+  output is evidence of neither. To say whether one key has a default, read
+  its parser in `deltadewa/ips_config.py`.
 - The `dashboard.yaml` / `dashboard_config_*.yaml` presentation surface and
   `examples/dashboard/` were **retired in #279**. A hit on those names is
   history (CHANGELOG, `docs/`), not a live reader; do not report it as a
