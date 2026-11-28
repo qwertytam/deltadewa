@@ -34,19 +34,17 @@ Pick the number by the largest change since the last tag: **patch** for
 fixes and docs, **minor** for new features, **major** for a breaking change
 as defined here.
 
-**Breaking changes after 1.0.** A change is breaking when a deployed host's
-own `config/ips.yaml` or `exports/program_state.json`, read correctly by the
-previous release, would, unedited, fail to load or change meaning (a key or
-field changes unit or effect or is now ignored, or the default for an
-omitted one changes), or would be rewritten so that the previous release
-cannot read it and rolling back needs a restore. A breaking change takes a
-**major** version. A new optional key, section or field is a **minor** if
-existing files load and mean what they did, and the previous release can
-still read them. A patch is never breaking. This rule is about files: a
-corrected calculation doesn't become breaking just because readings move,
-but its CHANGELOG entry says they do. A breaking entry says **Breaking**,
-names the file and key or field, and gives the step to take before
-deploying.
+**Breaking changes.** This program has one operator and, for now, keeps no
+backwards compatibility. Whatever is changed or retired is replaced
+outright, with no alias, fallback reader or retained option. A change is
+breaking if it requires editing or converting `config/ips.yaml` or a file
+under `exports/`, or changes what such a file means (including through a
+changed default), judged against any file the previous release accepted. It
+takes a **major** version. A key whose meaning changes gets a new,
+**required** name, so an old file fails to load instead of being misread.
+If a saved record's format changes, back it up and convert it once; don't
+keep two readers. The changelog entry says **Breaking** and gives the step
+to take before deploying.
 
 Then, in **one release PR** off `main`:
 

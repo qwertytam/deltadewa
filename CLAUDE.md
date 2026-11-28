@@ -109,6 +109,12 @@ with a test — not in a page callback.
 
 ## Code conventions (ruff is strict — preview mode, large rule set)
 
+- **No backwards compatibility, for now.** The program has one operator, so
+  keep the codebase pruned: replace and delete. No alias, fallback reader,
+  retained option, or default that exists only so an older file loads. A key whose meaning changes gets a new,
+  **required** name. A saved record is never just discarded: back it up and
+  convert it once. What counts as breaking, and the version number it takes,
+  is in `docs/RELEASING.md`. Existing compatibility code is #527.
 - **Line length 80**, target `py311`.
 - **Docstrings required** (`pydocstyle`/`D`) on modules, classes, and public functions.
 - **Type annotations required** (`ANN`) on all new code; keep `mypy` clean.
