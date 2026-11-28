@@ -63,7 +63,14 @@ checklist, say so and stop: do not invent one. Without pages, say so and stop.
 ## Dump recipe
 
 Only for a `127.0.0.1` or `localhost` URL; refuse anything else. Never point it
-at a deployed app, never start the app, never run any other module. Write this
+at a deployed app, never start the app, never run any other module.
+
+It needs Playwright's Chromium, which `poetry install` does not install; the
+caller installs it once with `poetry run playwright install chromium`. If the
+launch fails because the browser is missing, do not install it yourself: say
+so, give that command, and stop unless the caller supplied PDFs or text dumps.
+
+Write this
 to `<scratch>/dump_pages.py` and run it from the repo root as
 `poetry run python -I <scratch>/dump_pages.py <url> <scratch>/dump`, after
 `mkdir -p <scratch>/dump`:
